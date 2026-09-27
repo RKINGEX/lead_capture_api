@@ -10,5 +10,6 @@ class Lead(Base):
     phone = Column(String, unique=True)
     request = Column(String)
     notes = Column(String)
+    temperature = Column(String, nullable=True)
 
 
