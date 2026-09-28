@@ -7,10 +7,12 @@ load_dotenv()
 
 try:
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-except:
+except Exception as e:
     client = None
 
 def clasify_lead(lead):
+    if client is None:
+        raise RuntimeError("LLM client not initialized - check your GEMINI_API_KEY")
 
     prompt = f"""
     You are a lead classification expert. You will receive information about a lead in JSON format. 

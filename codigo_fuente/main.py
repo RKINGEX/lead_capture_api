@@ -42,13 +42,15 @@ def create_lead(lead: Valid_Lead):
 
         db.commit()
 
-    except AttributeError:
-
+    except RuntimeError as e:
+        print({"error": "LLM client unavailable", "details": str(e)})
         new_lead.temperature = "pending"
-
         db.commit()
 
-        raise RuntimeError(f"Unable to load llm")
+    except Exception as e:
+        print({"error": "Unexpected classification error", "details": str(e)})
+        new_lead.temperature = "pending"
+        db.commit()
 
     db.refresh(new_lead)
 
