@@ -1,0 +1,445 @@
+# Lead Capture API
+
+A backend API built with **pure Python** to capture, validate, persist, and classify potential clients using an LLM.
+
+This project is part of my **Road to Agentic AI**, focused on building the backend fundamentals required to create reliable AI-powered systems and agents.
+
+The goal is to understand what happens behind automation platforms by implementing the core workflow directly with Python.
+
+---
+
+## Architecture
+
+```text
+Client
+(Postman / cURL)
+      │
+      ▼
+FastAPI
+POST /leads
+      │
+      ▼
+Pydantic
+Validation
+      │
+      ▼
+SQLite
+Persist Lead
+      │
+      ▼
+LLM
+Classify Lead
+      │
+      ▼
+SQLite
+Save Classification
+      │
+      ▼
+JSON Response
+```
+
+### Request flow
+
+1. The client sends lead information through a `POST /leads` request.
+2. **FastAPI** receives the HTTP request.
+3. **Pydantic** validates the incoming data.
+4. The lead is stored in **SQLite**.
+5. An **LLM** analyzes and classifies the lead.
+6. The classification result is stored in the database.
+7. The API returns a JSON response to the client.
+
+---
+
+## Tech Stack
+
+* **Python** — Backend language
+* **FastAPI** — REST API framework
+* **Pydantic** — Request validation and data schemas
+* **SQLAlchemy** — ORM and database interaction
+* **SQLite** — Local relational database
+* **LLM** — Lead classification
+* **Postman / cURL** — API testing
+* **python-dotenv** — Environment variable management
+
+---
+
+## Technical Decisions
+
+### Why FastAPI?
+
+FastAPI was chosen because it provides a simple way to build HTTP APIs while working naturally with Python type hints and Pydantic validation.
+
+It also makes it easy to expose endpoints that can later be consumed by other applications, automation workflows, or AI agents.
+
+### Why Pydantic?
+
+Pydantic is responsible for validating incoming data before it reaches the application logic.
+
+The API uses Pydantic to ensure that required fields are present and that incoming values have the expected format and types.
+
+This prevents invalid data from being persisted in the database.
+
+### Why SQLite?
+
+SQLite was selected because this project is intentionally focused on learning backend fundamentals without introducing unnecessary infrastructure.
+
+It provides a real relational database while keeping the project simple and portable.
+
+The architecture can later be migrated to a production database such as PostgreSQL.
+
+### Why SQLAlchemy?
+
+SQLAlchemy provides an abstraction between the Python application and the database.
+
+Instead of manually writing SQL for every operation, the application can work with Python models and database sessions.
+
+This also makes the transition to another relational database easier in the future.
+
+### Why classify the lead with an LLM?
+
+The purpose of the LLM is to transform raw lead information into useful business information.
+
+At this stage, the LLM is designed to classify each lead based on its **intent**, assigning one of two classifications:
+
+* `Hot`
+* `Cold`
+
+This classification is stored in the database and can later be used to determine which leads should receive follow-up.
+
+If the LLM cannot complete the classification, the application handles the failure and assigns the lead a pending status instead of silently losing the lead.
+
+---
+
+## API Endpoint
+
+### `POST /leads`
+
+Creates a new lead, stores it in the database, sends its information to an LLM for classification, and stores the classification result.
+
+### Request
+
+```http
+POST /leads
+Content-Type: application/json
+```
+
+### Required fields
+
+The following fields are required:
+
+* name
+* email
+* phone
+* request
+
+### Optional fields
+
+* `notes` — Optional additional information about the lead.
+
+The `notes` field is the **only optional field** in the incoming JSON request. The API can receive a lead without notes.
+
+### Example request
+
+```json
+{
+  "name": "Juan",
+  "email": "juan@example.com",
+  "phone": "8095551234",
+  "request": "Website design",
+  "notes": "I need a website for my recent business."
+}
+```
+
+### Request without optional notes
+
+The `notes` field can be omitted completely:
+
+```json
+{
+  "nombre": "Juan",
+  "correo": "juan@example.com",
+  "numero": "8095551234",
+  "servicio": "Website design",
+  "notes": ""
+}
+```
+
+Both requests are valid as long as all required fields satisfy the Pydantic validation rules.
+
+---
+
+## Example with cURL for PowerShell
+
+```powershell
+$jsonData = @{
+    name = "Angeles Medina"
+    email = "rjasbd5@gmail.com"
+    phone = "4125647789"
+    request = "I just want to know how much a website will cost"
+    notes = ""
+} | ConvertTo-Json
+
+$url = "http://localhost:8000/leads"
+
+curl -Uri $url `
+     -Method POST `
+     -Body $jsonData `
+     -ContentType "application/json"
+```
+
+---
+
+## Example Response
+
+```json
+{
+  "id": 1,
+  "name": "Angeles Medina",
+  "email": "rjasbd5@gmail.com",
+  "phone": "4125647789",
+  "request": "I just want to know how much a website will cost",
+  "notes": "",
+  "classification": "Hot"
+}
+```
+
+The classification is generated by the LLM based on the lead's intent.
+
+If the LLM classification fails, the application can preserve the lead and assign a pending status for later processing.
+
+> The exact response fields depend on the current implementation of the API.
+
+---
+
+## Validation
+
+The API validates incoming data before storing it.
+
+For example, an invalid request such as:
+
+```json
+{
+  "name": "Juan",
+  "email": "not-an-email",
+  "phone": "8095551234",
+  "request": "Website design"
+  "notes": ""
+}
+```
+
+should be rejected by the validation layer because the email does not satisfy the expected format.
+
+FastAPI returns an HTTP error response when the request does not satisfy the Pydantic schema.
+
+A request missing one of the required fields will also be rejected.
+
+For example:
+
+```json
+{
+  "name": "Juan",
+  "email": "juan@example.com",
+  "phone": "8095551234"
+}
+```
+
+is invalid because the request field is required.
+
+---
+
+## Database
+
+The project uses SQLite to persist leads.
+
+Conceptually, the data flow is:
+
+```text
+HTTP Request
+     │
+     ▼
+Pydantic Schema
+     │
+     ▼
+SQLAlchemy Model
+     │
+     ▼
+SQLite
+```
+
+The database stores the original lead information as well as the classification generated by the LLM.
+
+This separation allows the API to maintain the original user input while also storing the processed information.
+
+---
+
+## Error Handling
+
+The API should handle failures at different stages of the pipeline.
+
+Examples include:
+
+* LLM/API failures
+* Incorrect data input schemas
+* Database errors
+
+An important design principle is that an external LLM failure should not cause the entire application to fail silently.
+
+If the LLM cannot classify a lead, the application should preserve the lead in the database and automatically assign a **pending status** so that the lead can be processed later after a human verification.
+
+This prevents a temporary AI service failure from causing data loss.
+
+---
+
+## Running the Project
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/SoyColde/lead_capture_api
+cd lead_capture_api
+```
+
+### 2. Create a virtual environment
+
+Windows:
+
+```powershell
+python -m venv .venv
+```
+
+Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure environment variables
+
+Create a `.env` file:
+
+```env
+LLM_API_KEY=your_api_key_here
+```
+
+### 5. Start the API
+
+```bash
+uvicorn main:app --reload
+```
+
+The API should be available at:
+
+```text
+http://127.0.0.1:8000
+```
+
+FastAPI also provides interactive API documentation at:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+## Example Workflow
+
+A complete request looks like this:
+
+```text
+POST /leads
+     │
+     ▼
+Validate request
+     │
+     ├── Invalid → HTTP error
+     │
+     ▼
+Create database record
+     │
+     ▼
+Send lead information to LLM
+     │
+     ├── Error → Preserve lead
+     │             │
+     │             ▼
+     │        Assign pending status
+     │
+     ▼
+Receive classification
+     │
+     ├── Hot
+     │
+     └── Cold
+     │
+     ▼
+Update database record
+     │
+     ▼
+Return JSON
+```
+
+---
+
+## What I Learned
+
+This project focuses on understanding the fundamentals behind AI-powered backend systems.
+
+Key concepts practiced:
+
+* HTTP requests
+* REST API architecture
+* FastAPI
+* Pydantic validation
+* SQLAlchemy
+* SQLite
+* Database sessions
+* ORM models
+* Environment variables
+* LLM API integration
+* Error handling
+* JSON request/response structures
+* Separation between API, database, and AI logic
+
+---
+
+## Project Goal
+
+This project is not just about creating a lead form.
+
+The objective is to understand how to build the **backend layer that AI agents and automation systems depend on**.
+
+The long-term direction is to evolve from simple APIs into systems where AI can:
+
+```text
+Receive information
+       ↓
+Understand it
+       ↓
+Make a decision
+       ↓
+Call external systems
+       ↓
+Perform an action
+       ↓
+Store the result
+       ↓
+Continue the workflow
+```
+
+This API represents one of the first steps toward building more complex **agentic AI systems**.
+
+---
+
+## Author
+
+**Colde**
+
+ITLA — Artificial Intelligence
+
+Road to Agentic AI
