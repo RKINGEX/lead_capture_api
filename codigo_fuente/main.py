@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from sqlalchemy.exc import IntegrityError
+from fastapi import FastAPI, HTTPException
 from database import engine, Base, sessionlocal
 from models import Lead
 from schemas import Valid_Lead
@@ -8,23 +9,31 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-@app.post("/leads")
+@app.post("/leads", status_code=201)
 def create_lead(lead: Valid_Lead):
     # endpoint to receive lead data and create a new lead
     db = sessionlocal() 
 
-    new_lead = Lead(
-        name=lead.name,
-        email=lead.email,
-        phone=lead.phone,
-        request=lead.request,
-        notes=lead.notes
-    )
+    try:
+        new_lead = Lead(
+                name=lead.name,
+                email=lead.email,
+                phone=lead.phone,
+                request=lead.request,
+                notes=lead.notes)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail={"error": "Invalid lead data", "details": str(e)})
 
-    db.add(new_lead)
+    try:
+        db.add(new_lead)
+        db.commit()
+        db.refresh(new_lead)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"error": "Lead with this email already exists", 
+                                                     "details": "Email already in use"})
 
-    db.commit()
-    db.refresh(new_lead)
+    
 
     try:
         result = clasify_lead(new_lead)
