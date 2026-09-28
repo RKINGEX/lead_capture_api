@@ -30,8 +30,8 @@ def create_lead(lead: Valid_Lead):
         db.refresh(new_lead)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail={"error": "Lead with this email already exists", 
-                                                     "details": "Email already in use"})
+        raise HTTPException(status_code=409, detail={"error": "Lead with this email or phone number already exists", 
+                                                     "details": "Email or phone number already in use"})
 
     
 

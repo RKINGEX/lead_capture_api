@@ -3,11 +3,11 @@ from dotenv import load_dotenv
 from google import genai
 from schemas import LeadClassification
 
-load_dotenv()
-
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
 def clasify_lead(lead):
+
+    load_dotenv()
+
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     prompt = f"""
     You are a lead classification expert. You will receive information about a lead in JSON format. 
