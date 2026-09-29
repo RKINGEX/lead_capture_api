@@ -3,14 +3,17 @@ from dotenv import load_dotenv
 from google import genai
 from schemas import LeadClassification
 
-load_dotenv()
+load_dotenv() # It loads environment variables from a .env file,
 
 try:
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 except Exception as e:
-    client = None
+    client = None #Autoset client as none since there was a problem with the API key
 
 def clasify_lead(lead):
+    # It checks if the client is None, which indicates that the LLM client was not initialized properly. 
+    # If the client is None, it raises a RuntimeError with a message indicating that the LLM client is not initialized 
+    # Suggests checking the GEMINI_API_KEY.
     if client is None:
         raise RuntimeError("LLM client not initialized - check your GEMINI_API_KEY")
 
