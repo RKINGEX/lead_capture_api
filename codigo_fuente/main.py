@@ -1,22 +1,27 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI, HTTPException, Depends, Query
-from database import engine, Base, get_db
+from database import engine, Base
+from dependencies import get_db, verify_api_key
 from models import Lead
 from schemas import Valid_Lead
-from llm_service import clasify_lead
+from llm_service import classify_lead
 import math
+import logging
+import logging_config
+from google.genai.errors import ServerError
+
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 @app.post("/leads", status_code=201)
-def create_lead(lead: Valid_Lead, db: Session = Depends(get_db)):
+def create_lead(lead: Valid_Lead, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     # endpoint to receive lead data and create a new lead) 
 
     try:
-    # Error handling for incorrect POST format (missing required fields or invalid data types)
         new_lead = Lead(
                 name=lead.name,
                 email=lead.email,
@@ -24,22 +29,24 @@ def create_lead(lead: Valid_Lead, db: Session = Depends(get_db)):
                 request=lead.request,
                 notes=lead.notes)
     except Exception as e:
+        logger.exception(f"Invalid lead data: {e}")
         raise HTTPException(status_code=422, detail={"error": "Invalid lead data", "details": str(e)})
-
+    
+    # Handle duplicate email or phone number
     try:
-    # Error handling for unique date repetition (email or phone number) and invalid data
         db.add(new_lead)
         db.commit()
         db.refresh(new_lead)
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
+        logger.warning(f"Lead with this email or phone number already exists: {e}")
         raise HTTPException(status_code=409, detail={"error": "Lead with this email or phone number already exists", 
                                                      "details": "Email or phone number already in use"})
 
     
 
     try:
-        result = clasify_lead(new_lead)
+        result = classify_lead(new_lead)
 
         new_lead.temperature = result.temperature
 
@@ -47,18 +54,25 @@ def create_lead(lead: Valid_Lead, db: Session = Depends(get_db)):
 
     except RuntimeError as e:
     #It catches the RuntimeError exception raised by the clasify_lead function when the LLM client is unavailable. 
-    #It prints an error message and sets the lead's temperature to "pending" before committing the changes to the database.
-        print({"error": "LLM client unavailable", "details": str(e)})
+        logger.error("LLM client unavailable", extra={"details": str(e)})
+        new_lead.temperature = "pending"
+        db.commit()
+
+    except ServerError as e:
+    #It catches the ServerError exception raised by the clasify_lead function when there is a server error while using the LLM. 
+        logger.error("Server error from LLM", extra={"details": str(e)})
         new_lead.temperature = "pending"
         db.commit()
 
     except Exception as e:
     #It catches any other unexpected exceptions raised by the clasify_lead function.
-        print({"error": "Unexpected classification error", "details": str(e)})
+        logger.exception("Unexpected classification error", extra={"details": str(e)})
         new_lead.temperature = "pending"
         db.commit()
 
     db.refresh(new_lead)
+
+    logger.info(f"Lead created successfully with ID: {new_lead.id} and temperature: {new_lead.temperature}")
 
     return {"message": "Lead created successfully", 
             "id": new_lead.id,
@@ -68,20 +82,27 @@ def create_lead(lead: Valid_Lead, db: Session = Depends(get_db)):
 @app.get("/leads", status_code=200)
 def get_leads(limit: int = Query(10, ge=1, le=100, description="Number of leads to retrieve per page (1-100)"),
               pages: int = Query(1, ge=1, description="Page number to retrieve (1-based)"),
-              db: Session = Depends(get_db)):
+              db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     """This retrieves a list of leads from the database, with optional pagination parameters (limit and pages)."""
 
     offset = (pages - 1) * limit
 
     total_leads = db.query(Lead).count()
 
-    total_pages = math.ceil(total_leads / limit)
-    
+    if total_leads:
+        total_pages = math.ceil(total_leads / limit)
+    else:
+        total_pages = 0
+        logger.warning("No leads found in the database")
+        raise HTTPException(status_code=404, detail={"error": "No leads found", "details": "The database is empty"})
+
     leads = (db.query(Lead)
              .offset(offset)
              .limit(limit)
              .all()
             )
+
+    logger.info(f"Retrieved {len(leads)} leads (Page {pages} of {total_pages})")
     
     return {"pages": pages,
             "limit": limit,
@@ -90,23 +111,26 @@ def get_leads(limit: int = Query(10, ge=1, le=100, description="Number of leads 
             "leads": leads}
 
 @app.get("/leads/{id}", status_code=200)
-def get_lead(id: int, db: Session = Depends(get_db)):
+def get_lead(id: int, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     """This retrieves a specific lead from the database based on the provided ID."""
     
     lead = db.query(Lead).filter(Lead.id == id).first()
     
     if not lead:
+        logger.warning(f"Lead not found with ID: {id}")
         raise HTTPException(status_code=404, detail={"error": "Lead not found", "details": f"No lead found with ID: {id}"})
     
+    logger.info(f"Lead retrieved successfully with ID: {lead.id}")
     return lead
 
 @app.patch("/leads/{id}", status_code=200)
-def update_lead(id: int, lead: Valid_Lead, db: Session = Depends(get_db)):
+def update_lead(id: int, lead: Valid_Lead, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     """This updates a specific lead in the database based on the provided ID and new lead data."""
     
     existing_lead = db.query(Lead).filter(Lead.id == id).first()
     
     if not existing_lead:
+        logger.warning(f"Lead not found with ID: {id}")
         raise HTTPException(status_code=404, detail={"error": "Lead not found", "details": f"No lead found with ID: {id}"})
     
     try:
@@ -121,11 +145,15 @@ def update_lead(id: int, lead: Valid_Lead, db: Session = Depends(get_db)):
         
     except IntegrityError:
         db.rollback()
+        logger.warning(f"Lead with this email or phone number already exists: {lead.email}, {lead.phone}")
         raise HTTPException(status_code=409, detail={"error": "Lead with this email or phone number already exists", 
                                                      "details": "Email or phone number already in use"})
     except Exception as e:
         db.rollback()
+        logger.exception("Unexpected error occurred", extra={"details": str(e)})
         raise HTTPException(status_code=422, detail={"error": "Unexpected error occurred", "details": str(e)})
+
+    logger.info(f"Lead updated successfully with ID: {existing_lead.id}")
     
     return {"message": "Lead updated successfully", 
             "id": existing_lead.id,
