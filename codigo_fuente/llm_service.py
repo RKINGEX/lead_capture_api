@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from google import genai
 from google.genai.errors import ServerError
-from schemas import LeadClassification
+from codigo_fuente.schemas import LeadClassification
 import logging
 
 logger = logging.getLogger(__name__)

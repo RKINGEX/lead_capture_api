@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 from sqlalchemy.orm import sessionmaker
-from models import Lead
+from codigo_fuente.models import Lead
 
 load_dotenv()
 

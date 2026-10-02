@@ -1,14 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI, HTTPException, Depends, Query
-from database import engine, Base
-from dependencies import get_db, verify_api_key
-from models import Lead
-from schemas import Valid_Lead
-from llm_service import classify_lead
+from codigo_fuente.database import engine, Base
+from codigo_fuente.dependencies import get_db, verify_api_key
+from codigo_fuente.models import Lead
+from codigo_fuente.schemas import Valid_Lead
+from codigo_fuente.llm_service import classify_lead
 import math
 import logging
-import logging_config
+import codigo_fuente.logging_config
 from google.genai.errors import ServerError
 
 logger = logging.getLogger(__name__)
