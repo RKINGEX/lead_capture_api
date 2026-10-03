@@ -21,19 +21,15 @@ app = FastAPI()
 def create_lead(lead: Valid_Lead, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     # endpoint to receive lead data and create a new lead) 
 
-    try:
-        if lead.temperature:
-            logger.warning("Temperature field was provided in the request, which is not allowed")
-            raise HTTPException(status_code=401, detail={"error": "Temperature field should not be provided"})
-        new_lead = Lead(
-                name=lead.name,
-                email=lead.email,
-                phone=lead.phone,
-                request=lead.request,
-                notes=lead.notes)
-    except Exception as e:
-        logger.exception(f"Invalid lead data: {e}")
-        raise HTTPException(status_code=422, detail={"error": "Invalid lead data", "details": str(e)})
+    if lead.temperature:
+        logger.warning("Temperature field was provided in the request, which is not allowed")
+        raise HTTPException(status_code=401, detail={"error": "Temperature field should not be provided"})
+    new_lead = Lead(
+            name=lead.name,
+            email=lead.email,
+            phone=lead.phone,
+            request=lead.request,
+            notes=lead.notes)
     
     # Handle duplicate email or phone number
     try:
