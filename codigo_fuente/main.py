@@ -23,7 +23,7 @@ def create_lead(lead: Valid_Lead, db: Session = Depends(get_db), api_key: str = 
 
     if lead.temperature:
         logger.warning("Temperature field was provided in the request, which is not allowed")
-        raise HTTPException(status_code=401, detail={"error": "Temperature field should not be provided"})
+        raise HTTPException(status_code=422, detail={"error": "Temperature field should not be provided"})
     new_lead = Lead(
             name=lead.name,
             email=lead.email,
