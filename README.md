@@ -1,157 +1,72 @@
 # Lead Capture API
 
-A backend API built with **pure Python** to capture, validate, persist, and classify potential clients using an LLM.
+A backend API built with **Python and FastAPI** to capture, validate, persist, and classify potential clients using an LLM.
 
-This project is part of my **Road to Agentic AI**, focused on building the backend fundamentals required to create reliable AI-powered systems and agents.
+This project is part of my **Road to Agentic AI**, focused on learning the backend foundations required to build reliable AI-powered systems and automation.
 
-The goal is to understand what happens behind automation platforms by implementing the core workflow directly with Python.
+The project evolved from a simple SQLite API into a containerized, tested, authenticated, PostgreSQL-backed API with migrations and public deployment.
 
 ---
 
 ## Architecture
 
 ```text
-Client
-(Postman / cURL)
-      │
-      ▼
-FastAPI
-POST /leads
-      │
-      ▼
-Pydantic
-Validation
-      │
-      ▼
-SQLite
-Persist Lead
-      │
-      ▼
-LLM
-Classify Lead
-      │
-      ▼
-SQLite
-Save Classification
-      │
-      ▼
-JSON Response
+Client (Postman / cURL)
+          │
+          ▼
+       FastAPI
+          │
+     API Key Auth
+          │
+     Pydantic Validation
+          │
+    Depends(get_db)
+          │
+          ▼
+      PostgreSQL
+          │
+          ▼
+         LLM
+          │
+     Hot / Cold
+     or pending
 ```
-
-### Request flow
-
-1. The client sends lead information through a `POST /leads` request.
-2. **FastAPI** receives the HTTP request.
-3. **Pydantic** validates the incoming data.
-4. The lead is stored in **SQLite**.
-5. An **LLM** analyzes and classifies the lead.
-6. The classification result is stored in the database.
-7. The API returns a JSON response.
 
 ---
 
 ## Tech Stack
 
-* **Python** — Backend language
-* **FastAPI** — REST API framework
-* **Pydantic** — Request validation and data schemas
-* **SQLAlchemy** — ORM and database interaction
-* **SQLite** — Local relational database
-* **LLM** — Lead classification
-* **Postman / cURL** — API testing
-* **python-dotenv** — Environment variable management
+* **Python**
+* **FastAPI**
+* **Pydantic**
+* **SQLAlchemy**
+* **PostgreSQL**
+* **Alembic**
+* **LLM API**
+* **Pytest**
+* **Docker / Docker Compose**
+* **Render**
+* **python-dotenv**
+* **Python Logging**
 
 ---
 
-## Technical Decisions
+## API Endpoints
 
-### Why FastAPI?
+All endpoints require an API key through the `X-API-Key` header.
 
-FastAPI was chosen because it provides a simple way to build HTTP APIs while working naturally with Python type hints and Pydantic validation.
-
-It also makes it easy to expose endpoints that can later be consumed by other applications, automation workflows, or AI agents.
-
-### Why Pydantic?
-
-Pydantic validates incoming data before it reaches the application logic.
-
-The API uses it to ensure that required fields are present and that incoming values have the expected format and types.
-
-Invalid requests are rejected with a `422 Unprocessable Entity` response.
-
-### Why SQLite?
-
-SQLite was selected because this project focuses on learning backend fundamentals without introducing unnecessary infrastructure.
-
-It provides a real relational database while keeping the project simple and portable.
-
-The architecture can later be migrated to a production database such as PostgreSQL.
-
-### Why SQLAlchemy?
-
-SQLAlchemy provides an abstraction between the Python application and the database.
-
-The application works with Python models and database sessions instead of manually writing SQL for every operation.
-
-This also makes the transition to another relational database easier.
-
-### Why classify the lead with an LLM?
-
-The LLM transforms raw lead information into useful business information.
-
-At this stage, each lead is classified based on its intent as:
-
-* `Hot`
-* `Cold`
-
-If the LLM fails during classification, the lead is preserved and assigned a `pending` status instead of being lost.
-
-### Model initialization
-
-The LLM is initialized inside the `classify_lead()` function rather than when the API starts.
-
-This ties model initialization to the operation that actually requires it.
-
----
-
-## API Endpoint
+| Method  | Endpoint      | Description                   |
+| ------- | ------------- | ----------------------------- |
+| `POST`  | `/leads`      | Create and classify a lead    |
+| `GET`   | `/leads`      | Get a paginated list of leads |
+| `GET`   | `/leads/{id}` | Get a specific lead           |
+| `PATCH` | `/leads/{id}` | Manually update a lead        |
 
 ### `POST /leads`
 
-Creates a new lead, stores it in the database, classifies it using an LLM, and stores the classification result.
+Creates a lead and attempts to classify it with an LLM.
 
-### Request
-
-```http
-POST /leads
-Content-Type: application/json
-```
-
-### Required fields
-
-All five fields are required:
-
-* `name`
-* `email`
-* `phone`
-* `request`
-* `notes`
-
-The `notes` field must be included in the JSON request, but its value can be an empty string.
-
-### Example request
-
-```json
-{
-  "name": "Juan",
-  "email": "juan@example.com",
-  "phone": "8095551234",
-  "request": "Website design",
-  "notes": "I need a website for my recent business."
-}
-```
-
-### Request with empty notes
+Required fields:
 
 ```json
 {
@@ -163,288 +78,219 @@ The `notes` field must be included in the JSON request, but its value can be an 
 }
 ```
 
-Both requests are valid.
-
----
-
-## Example with cURL for PowerShell
-
-```powershell
-$jsonData = @{
-    name = "Angeles Medina"
-    email = "rjasbd5@gmail.com"
-    phone = "4125647789"
-    request = "I just want to know how much a website will cost"
-    notes = ""
-} | ConvertTo-Json
-
-$url = "http://localhost:8000/leads"
-
-curl -Uri $url `
-     -Method POST `
-     -Body $jsonData `
-     -ContentType "application/json"
-```
-
----
-
-## Example Response
-
-```json
-{
-  "message": "Lead created successfully",
-  "id": 1,
-  "temperature": "Hot"
-}
-```
-
-If classification fails, the lead is preserved with:
+Possible classification:
 
 ```text
+Hot
+Cold
 pending
 ```
 
+If the LLM fails, the lead is still stored with `pending` status.
+
+### `GET /leads`
+
+Returns leads using pagination:
+
+```text
+GET /leads?page=1&limit=10
+```
+
+### `GET /leads/{id}`
+
+Returns a specific lead.
+
+Returns `404 Not Found` if the lead does not exist.
+
+### `PATCH /leads/{id}`
+
+Allows manual updates to a lead, including changing its temperature when its previous classification is `pending`.
+
 ---
 
-## Validation
+## Authentication
 
-Pydantic validates the request before it reaches the database.
-
-For example, this request is invalid because `request` is missing:
-
-```json
-{
-  "name": "Juan",
-  "email": "juan@example.com",
-  "phone": "8095551234",
-  "notes": ""
-}
-```
-
-FastAPI returns:
+API key authentication was added to all four endpoints.
 
 ```http
-422 Unprocessable Entity
+X-API-Key: your_api_key
 ```
 
-The same applies if `notes` is omitted because it is a required field.
+Responses:
 
-An invalid email format is also rejected:
+* `401 Unauthorized` — API key missing
+* `403 Forbidden` — invalid API key
 
-```json
-{
-  "name": "Juan",
-  "email": "not-an-email",
-  "phone": "8095551234",
-  "request": "Website design",
-  "notes": ""
-}
+The key is stored through environment variables.
+
+---
+
+## Database & Migrations
+
+The project was migrated from **SQLite to PostgreSQL**.
+
+Database sessions are managed through FastAPI dependency injection using:
+
+```python
+Depends(get_db)
 ```
+
+instead of manually creating sessions inside each endpoint.
+
+**Alembic** is used for version-controlled database schema migrations.
+
+A separate migration script is also included under:
+
+```text
+migrations/
+```
+
+to support transferring existing SQLite data to PostgreSQL.
 
 ---
 
 ## Error Handling
 
-The API handles failures according to the stage where they occur.
+The API handles failures at different stages:
 
-| Component            | How it fails                            | What happens today                                             | What should happen                                  |
-| -------------------- | --------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------- |
-| Pydantic             | Required field missing or invalid data  | Returns `422 Unprocessable Entity` and does not store the lead | Reject invalid input before application logic       |
-| SQLite / SQLAlchemy  | Duplicate email                         | Rolls back the transaction and returns `409 Conflict`          | Preserve database integrity and report the conflict |
-| LLM                  | Model/API failure during classification | Lead remains stored with `pending` classification              | Prevent AI failures from causing data loss          |
-| Database transaction | Database operation fails                | `rollback()` reverts the failed transaction                    | Keep the database session consistent                |
+| Scenario              | Response                    |
+| --------------------- | --------------------------- |
+| Missing API key       | `401 Unauthorized`          |
+| Invalid API key       | `403 Forbidden`             |
+| Invalid/missing data  | `422 Unprocessable Entity`  |
+| Duplicate email/phone | `409 Conflict`              |
+| Lead not found        | `404 Not Found`             |
+| LLM failure           | Lead preserved as `pending` |
 
----
-
-## Database Integrity
-
-Each lead is identified by its stored information, including a unique email constraint.
-
-If a lead is submitted using an email that already exists, SQLAlchemy raises an integrity error.
-
-The application handles the error by:
-
-1. Catching the integrity error.
-2. Calling `rollback()`.
-3. Returning `409 Conflict`.
-
-This prevents the failed transaction from leaving the SQLAlchemy session in an unusable state.
+Database failures use `rollback()` to keep the session consistent.
 
 ---
 
-## LLM Error Handling
+## Logging
 
-The lead is persisted before the classification process.
+`print()` statements were replaced with structured Python logging.
 
-If `classify_lead()` successfully communicates with the LLM, the classification is stored as either:
+The application uses:
 
 ```text
-Hot
+INFO
+WARNING
+ERROR
 ```
 
-or:
+for application events, warnings, and unexpected failures.
+
+---
+
+## Testing
+
+Automated testing was implemented with **Pytest**.
+
+Tested scenarios include:
+
+* Successful lead creation — `201`
+* Duplicate email/phone — `409`
+* Invalid data — `422`
+* Missing API key — `401`
+* Invalid API key — `403`
+
+---
+
+## Docker
+
+The application is containerized with:
 
 ```text
-Cold
+Dockerfile
+docker-compose.yml
+.env.example
 ```
 
-If the LLM fails, the lead remains in SQLite and its classification becomes:
+Docker Compose runs:
 
 ```text
-pending
+API
+PostgreSQL
 ```
 
-This behavior was tested to verify that model failures do not result in lead loss.
+The PostgreSQL service includes a **health check**, ensuring the database is ready before the API starts.
 
----
-
-## HTTP Status Codes
-
-| Status Code                | Meaning                                        | Example in this project                        |
-| -------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| `201 Created`              | Resource was successfully created              | Lead successfully created                      |
-| `409 Conflict`             | Request conflicts with existing resource/state | Duplicate email                                |
-| `422 Unprocessable Entity` | Request does not satisfy validation rules      | Missing required field or invalid field format |
-
----
-
-## Database
-
-The project uses SQLite with SQLAlchemy to persist leads.
-
-The database stores:
-
-* Original lead information
-* LLM classification
-
-Database operations are handled through SQLAlchemy sessions.
-
-Successful transactions use:
-
-```python
-db.commit()
-```
-
-Failed transactions use:
-
-```python
-db.rollback()
-```
-
----
-
-## What I Learned
-
-This project focuses on understanding the backend fundamentals behind AI-powered systems.
-
-Key concepts practiced:
-
-* HTTP requests
-* HTTP status codes
-* REST API architecture
-* FastAPI
-* Pydantic validation
-* SQLAlchemy
-* SQLite
-* Database sessions
-* ORM models
-* Database transactions
-* `commit()`
-* `rollback()`
-* Integrity errors
-* Environment variables
-* LLM API integration
-* Model initialization
-* LLM error handling
-* JSON request/response structures
-* Separation between API, database, and AI logic
-
----
-
-## Verified Error Scenarios
-
-The following scenarios were implemented and tested:
-
-### Missing required field
-
-Pydantic rejects requests that do not contain all required fields.
-
-**Result:** `422 Unprocessable Entity`
-
-### Duplicate email
-
-Submitting a lead with an email that already exists triggers the database integrity handling.
-
-**Result:** `rollback()` + `409 Conflict`
-
-### LLM classification failure
-
-A model failure does not delete or prevent the lead from being stored.
-
-**Result:** lead preserved with `pending` classification.
-
-### Model initialization
-
-The LLM is initialized inside:
-
-```python
-classify_lead()
-```
-
-This means it is initialized when classification is actually required rather than when the API starts.
-
----
-
-## Running the Project
-
-### 1. Clone the repository
+The entire application can be started with:
 
 ```bash
-git clone https://github.com/SoyColde/lead_capture_api
+docker compose up
+```
+
+or rebuilt with:
+
+```bash
+docker compose up --build
+```
+
+No additional manual startup steps are required.
+
+---
+
+## Deployment
+
+The API is publicly deployed using **Render**.
+
+**Live API:**
+
+https://lead-capture-api-hut0.onrender.com
+
+**Interactive documentation:**
+
+https://lead-capture-api-hut0.onrender.com/docs
+
+---
+
+## Running Locally
+
+### Clone
+
+```bash
+git clone https://github.com/SoyColde/lead_capture_api.git
 cd lead_capture_api
 ```
 
-### 2. Create a virtual environment
-
-Windows:
+### Install dependencies
 
 ```powershell
 python -m venv .venv
-```
-
-Activate it:
-
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-### 3. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### Configure environment
 
-Create a `.env` file:
+Create a `.env` file based on `.env.example`.
 
 ```env
-LLM_API_KEY=your_api_key_here
+LLM_API_KEY=your_api_key
+API_KEY=your_api_key
+DATABASE_URL=your_database_url
 ```
 
-### 5. Start the API
+### Run migrations
+
+```bash
+alembic upgrade head
+```
+
+### Start API
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at:
+API:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-FastAPI interactive documentation:
+Docs:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -452,31 +298,48 @@ http://127.0.0.1:8000/docs
 
 ---
 
+## What I Learned
+
+This project helped me practice:
+
+* REST APIs and HTTP
+* FastAPI & Pydantic
+* SQLAlchemy & PostgreSQL
+* Dependency Injection with `Depends`
+* Database transactions and `rollback()`
+* Alembic migrations
+* API key authentication
+* Pagination and CRUD operations
+* LLM integration and failure handling
+* Logging
+* Automated testing with Pytest
+* Docker & Docker Compose
+* Database health checks
+* Deployment
+
+---
+
 ## Project Goal
 
-This project is not just about creating a lead form.
-
-The objective is to understand how to build the **backend layer that AI agents and automation systems depend on**.
-
-The long-term direction is to evolve from simple APIs into systems where AI can:
+The long-term goal is to understand the backend foundations behind **AI agents and automation systems**.
 
 ```text
 Receive information
-       ↓
+        ↓
 Understand it
-       ↓
+        ↓
 Make a decision
-       ↓
+        ↓
 Call external systems
-       ↓
+        ↓
 Perform an action
-       ↓
+        ↓
 Store the result
-       ↓
+        ↓
 Continue the workflow
 ```
 
-This API represents one of the first steps toward building more complex **agentic AI systems**.
+This API is one of the first steps in my **Road to Agentic AI**.
 
 ---
 
