@@ -55,7 +55,7 @@ def classify_lead(lead):
 
         return response.parsed
     
-    except genai.exceptions.ServerError as e:
+    except ServerError as e:
         raise ServerError(f"Server error occurred unable to use LLM: {e}")
     except Exception as e:
         logger.exception("Unexpected error occurred while classifying lead", extra={"details": str(e)})

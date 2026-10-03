@@ -7,6 +7,7 @@ class Valid_Lead(BaseModel):
     phone: str = Field(..., description="Teléfono del lead")
     request: str = Field(..., description="Solicitud del lead")
     notes: str = Field(description="Notas adicionales del lead")
+    temperature: Literal["cold", "hot"] | None = None
 
 class LeadClassification(BaseModel):
     temperature: Literal["cold", "hot"] = Field(..., description="Classification of the lead based on temperature")

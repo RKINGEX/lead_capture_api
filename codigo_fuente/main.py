@@ -139,6 +139,9 @@ def update_lead(id: int, lead: Valid_Lead, db: Session = Depends(get_db), api_ke
         existing_lead.phone = lead.phone
         existing_lead.request = lead.request
         existing_lead.notes = lead.notes
+        if lead.temperature:
+            existing_lead.temperature = lead.temperature
+            
         
         db.commit()
         db.refresh(existing_lead)
